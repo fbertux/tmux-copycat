@@ -74,6 +74,8 @@ _get_match_line_position() {
 	local file="$1"
 	local line_number="$2"
 	local match="$3"
+	local copycat_file="$4"
+	local position_number="$5"
 	local adjusted_line_num=$((line_number + 1))
 	local result_line=$(tail -"$adjusted_line_num" "$file" | head -1)
 
@@ -91,8 +93,46 @@ _get_match_line_position() {
 	result_line="$(_escape_backslash "$result_line")"
 	match="$(_escape_backslash "$match")"
 
-	local index=$($AWK_CMD -v a="$result_line" -v b="$match" 'BEGIN{print index(a,b)}')
-	local zero_index=$((index - 1))
+	local zero_index
+	if [ -n "$copycat_file" ] && [ -n "$position_number" ]; then
+		zero_index=$($AWK_CMD -v target_pos="$position_number" -v line="$result_line" '
+			NR <= target_pos {
+				colon = index($0, ":")
+				if (colon > 0) {
+					lines[NR] = substr($0, 1, colon - 1)
+					matches[NR] = substr($0, colon + 1)
+				} else {
+					lines[NR] = lines[NR - 1]
+					matches[NR] = $0
+				}
+				gsub(/\\/, "\\\\", matches[NR])
+			}
+			END {
+				target_ln = lines[target_pos]
+				offset = 0
+				rest = line
+				for (i = 1; i <= target_pos; i++) {
+					if (lines[i] == target_ln) {
+						idx = index(rest, matches[i])
+						if (i == target_pos) {
+							if (idx > 0) {
+								print offset + idx - 1
+							} else {
+								print 0
+							}
+						} else if (idx > 0) {
+							adv = idx + length(matches[i]) - 1
+							offset += adv
+							rest = substr(rest, adv + 1)
+						}
+					}
+				}
+			}
+		' "$copycat_file")
+	else
+		local index=$($AWK_CMD -v a="$result_line" -v b="$match" 'BEGIN{print index(a,b)}')
+		zero_index=$((index - 1))
+	fi
 	echo "$zero_index"
 }
 
@@ -149,10 +189,24 @@ _copycat_create_padding_below_result() {
 # performs a jump to go to line
 _copycat_go_to_line_with_jump() {
 	local line_number="$1"
+	local max_jump="$2"
+	local line_number_mode
+	line_number_mode="$(tmux show-option -gwv copy-mode-line-numbers 2>/dev/null)"
+	if [ -z "$line_number_mode" ]; then
+		line_number_mode="$(tmux show-option -gv copy-mode-line-numbers 2>/dev/null)"
+	fi
+	local goto_target="$line_number"
+	case "$line_number_mode" in
+		absolute|relative|hybrid)
+			goto_target="$((max_jump - line_number + 1))"
+			;;
+	esac
 	# first jumps to the "bottom" in copy mode so that jumps are consistent
 	tmux send-keys -X history-bottom
 	tmux send-keys -X start-of-line
-	tmux send-keys -X goto-line $line_number
+	if [ "$line_number" -gt "0" ]; then
+		tmux send-keys -X goto-line "$goto_target"
+	fi
 }
 
 # maximum line number that can be reached via tmux 'jump'
@@ -186,7 +240,7 @@ _copycat_jump_to_line() {
 		correct_line_number="$line_number"
 	fi
 
-	_copycat_go_to_line_with_jump "$correct_line_number"
+	_copycat_go_to_line_with_jump "$correct_line_number" "$max_jump"
 
 	if [ "$correction" -gt "0" ]; then
 		_copycat_manually_go_up "$correction"
@@ -256,7 +310,7 @@ do_next_jump() {
 	local result_line="$(_get_result_line "$copycat_file" "$position_number")"
 	local line_number=$(_get_line_number "$result_line" "$copycat_file" "$position_number")
 	local match=$(_get_match "$result_line")
-	local match_line_position=$(_get_match_line_position "$scrollback_file" "$line_number" "$match")
+	local match_line_position=$(_get_match_line_position "$scrollback_file" "$line_number" "$match" "$copycat_file" "$position_number")
 	_copycat_jump "$line_number" "$match_line_position" "$match" "$scrollback_line_number"
 }
 
@@ -284,6 +338,14 @@ main() {
 		do_next_jump "$next_position" "$copycat_file" "$scrollback_file"
 		notify_about_first_last_match "$current_position" "$next_position"
 		set_copycat_position "$next_position"
+	else
+		if [ "$(tmux display-message -p '#{pane_in_mode}')" == "1" ]; then
+			if [ "$NEXT_PREV" == "next" ]; then
+				tmux send-keys -X search-again 2>/dev/null || true
+			elif [ "$NEXT_PREV" == "prev" ]; then
+				tmux send-keys -X search-reverse 2>/dev/null || true
+			fi
+		fi
 	fi
 }
 main
