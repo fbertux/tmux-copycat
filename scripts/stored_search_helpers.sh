@@ -1,7 +1,7 @@
 stored_search_not_defined() {
 	local key="$1"
 	local search_value="$(tmux show-option -gqv "${COPYCAT_VAR_PREFIX}_${key}")"
-	[ -z $search_value ]
+	[ -z "$search_value" ]
 }
 
 stored_search_vars() {
