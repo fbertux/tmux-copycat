@@ -38,17 +38,15 @@ extend_key() {
 }
 
 copycat_cancel_bindings() {
-	# keys that quit copy mode are enhanced to quit copycat mode as well.
-	local cancel_mode_bindings=$(copycat_quit_copy_mode_keys)
-	local key
-	for key in $cancel_mode_bindings; do
-		extend_key "$key" "$CURRENT_DIR/copycat_mode_quit.sh"
-	done
+	# Clean up copycat state automatically whenever a pane leaves copy-mode.
+	tmux set-hook -gw pane-mode-changed "if-shell -F '#{==:#{pane_in_mode},0}' 'run-shell \"$CURRENT_DIR/copycat_mode_quit.sh\"'"
 }
 
 copycat_mode_bindings() {
-	extend_key "$(copycat_next_key)" "$CURRENT_DIR/copycat_jump.sh 'next'"
-	extend_key "$(copycat_prev_key)" "$CURRENT_DIR/copycat_jump.sh 'prev'"
+	local copy_mode
+	copy_mode=$(tmux_copy_mode_string)
+	tmux bind-key -T "$copy_mode" "$(copycat_next_key)" run-shell "$CURRENT_DIR/copycat_jump.sh 'next'"
+	tmux bind-key -T "$copy_mode" "$(copycat_prev_key)" run-shell "$CURRENT_DIR/copycat_jump.sh 'prev'"
 }
 
 main() {
