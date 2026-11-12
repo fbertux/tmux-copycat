@@ -17,7 +17,38 @@ reverse_and_create_copycat_file() {
 	local file=$1
 	local copycat_file=$2
 	local grep_pattern=$3
-	(tac 2>/dev/null || tail -r) < "$file" | grep -oniE "$grep_pattern" > "$copycat_file"
+	local file_search_key="$(get_tmux_option "@copycat_file_search" "C-f")"
+	local file_search_pattern="$(get_tmux_option "@copycat_search_${file_search_key}" "")"
+
+	if [ -n "$file_search_pattern" ] && [ "$grep_pattern" == "$file_search_pattern" ]; then
+		$AWK_CMD '
+			/\][$#][[:space:]]+ls([[:space:]]+.*)?$/ {
+				in_ls = ($0 !~ /\^C$/)
+				print
+				next
+			}
+			/\][$#]([[:space:]]|$)/ || /^[[:space:]]*$/ {
+				in_ls = 0
+				print
+				next
+			}
+			in_ls && $0 !~ /^[[:space:]]*(total[[:space:]]+[0-9]+|[0-9]*[[:space:]]*[d.lcbps-][rwxstST-]{9})/ {
+				line = ""
+				for (i = 1; i <= NF; i++) {
+					if ($i != "." && $i != ".." && $i ~ /^[[:alnum:]_.#$%&+=@~-]+$/) {
+						line = line (line ? " " : "") "\xef\x90\x90 " $i
+					} else {
+						line = line (line ? " " : "") $i
+					}
+				}
+				print line
+				next
+			}
+			{ print }
+		' "$file" | (tac 2>/dev/null || tail -r) | \grep -aoniP -- "$grep_pattern" > "$copycat_file"
+	else
+		(tac 2>/dev/null || tail -r) < "$file" | \grep -aoniP -- "$grep_pattern" > "$copycat_file"
+	fi
 }
 
 delete_old_files() {
@@ -47,12 +78,16 @@ if_no_results_exit_with_message() {
 
 main() {
 	local grep_pattern="$1"
-	if not_in_copycat_mode; then
-		delete_old_files
-		generate_copycat_file "$grep_pattern"
-		if_no_results_exit_with_message
-		set_copycat_mode
-		copycat_increase_counter
+	if in_copycat_mode; then
+		reset_copycat_position
+		unset_copycat_mode
+		copycat_decrease_counter
 	fi
+	reset_copycat_position
+	delete_old_files
+	generate_copycat_file "$grep_pattern"
+	if_no_results_exit_with_message
+	set_copycat_mode
+	copycat_increase_counter
 }
 main "$search_pattern"

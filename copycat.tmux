@@ -15,16 +15,16 @@ set_default_stored_searches() {
 	local ip_search="$(get_tmux_option "$copycat_ip_search_option" "$default_ip_search_key")"
 
 	if stored_search_not_defined "$url_search"; then
-		tmux set-option -g "${COPYCAT_VAR_PREFIX}_${url_search}" "(https?://|git@|git://|ssh://|ftp://|file:///)[[:alnum:]?=%/_.:,;~@!#$&()*+-]*"
+		tmux set-option -g "${COPYCAT_VAR_PREFIX}_${url_search}" '(?<=^|[[:space:](\x27\x22<])((https?://|git@|git://|ssh://|ftp://|file:///)[[:alnum:]?=%/_.:,;~@!#$&*+-]+)'
 	fi
 	if stored_search_not_defined "$file_search"; then
-		tmux set-option -g "${COPYCAT_VAR_PREFIX}_${file_search}" "(^|^\.|[[:space:]]|[[:space:]]\.|[[:space:]]\.\.|^\.\.)[[:alnum:]~_-]*/[][[:alnum:]_.#$%&+=/@-]*"
+		tmux set-option -g "${COPYCAT_VAR_PREFIX}_${file_search}" '(?<=^|[[:space:]\x27\x22:=])((?:[d.lcbps-][rwxstST-]{9}[.+@]?\s+.*?\s+[A-Z][a-z]{2}\s+\d{1,2}\s+(?:\d{2}:\d{2}(?::\d{2}\s+\d{4})?|\d{4})\s+(?:[^\x00-\x7F]+\s+)?\K[^\s]+)|(?:[\x{e000}-\x{f8ff}\x{f0000}-\x{fffff}]\s+\K(?!(?:\.\.?)(?:\s|$))[^\s]+)|(?:\.{0,2}/|~/|[[:alnum:]_.-]+/)[[:alnum:]_.#$%&+=/@-]*|\.?[[:alnum:]_~-]+(?:\.[[:alpha:]][[:alnum:]_.-]*|(?:[.-][[:alnum:]_~-]+){2,}))'
 	fi
 	if stored_search_not_defined "$digit_search"; then
 		tmux set-option -g "${COPYCAT_VAR_PREFIX}_${digit_search}" "[[:digit:]]+"
 	fi
 	if stored_search_not_defined "$hash_search"; then
-		tmux set-option -g "${COPYCAT_VAR_PREFIX}_${hash_search}" "\b([0-9a-f]{7,40}|[[:alnum:]]{52}|[0-9a-f]{64})\b"
+		tmux set-option -g "${COPYCAT_VAR_PREFIX}_${hash_search}" "\b(?-i:[0-9a-f]{7,40}|[0-9a-f]{64}|[[:alnum:]]{52})\b"
 	fi
 	if stored_search_not_defined "$ip_search"; then
 		tmux set-option -g "${COPYCAT_VAR_PREFIX}_${ip_search}" "[[:digit:]]{1,3}\.[[:digit:]]{1,3}\.[[:digit:]]{1,3}\.[[:digit:]]{1,3}"
